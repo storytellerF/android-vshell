@@ -35,6 +35,7 @@ public class TerminalPreferences {
     private boolean mShowExtraKeys;
     private boolean mIgnoreBellCharacter;
     private int mDataVersion;
+    private String uri;
 
     public TerminalPreferences(Context context) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
@@ -42,6 +43,16 @@ public class TerminalPreferences {
         mShowExtraKeys = prefs.getBoolean(PREF_SHOW_EXTRA_KEYS, true);
         mIgnoreBellCharacter = prefs.getBoolean(PREF_IGNORE_BELL, false);
         mDataVersion = prefs.getInt(PREF_DATA_VERSION, 0);
+        uri = prefs.getString("uri", null);
+    }
+
+    public boolean nullUri() {
+        return uri==null;
+    }
+    public void saveUri(Context context, String uri) {
+        this.uri = uri;
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putString("uri", uri).apply();
     }
 
     public boolean isFirstRun() {
@@ -83,5 +94,9 @@ public class TerminalPreferences {
 
     public int getDataVersion() {
         return mDataVersion;
+    }
+
+    public String getUri() {
+        return uri;
     }
 }

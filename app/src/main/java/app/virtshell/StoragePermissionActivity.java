@@ -27,9 +27,13 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.Toast;
+
+import java.io.File;
 
 /**
  * Ensure that application has storage access.
@@ -41,6 +45,8 @@ public class StoragePermissionActivity extends Activity {
     private final int WRITE_EXTERNAL_STORAGE_PERMISSION_CODE = 21;
     private final int MANAGE_EXTERNAL_STORAGE_PERMISSION_CODE = 42;
 
+
+
     @Override
     protected void onCreate(Bundle bundle) {
         super.onCreate(bundle);
@@ -49,6 +55,7 @@ public class StoragePermissionActivity extends Activity {
             startActivityForResult(intent, MANAGE_EXTERNAL_STORAGE_PERMISSION_CODE);
         } else {
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, WRITE_EXTERNAL_STORAGE_PERMISSION_CODE);
+
         }
     }
 

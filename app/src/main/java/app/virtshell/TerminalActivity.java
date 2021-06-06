@@ -37,6 +37,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
@@ -49,6 +51,22 @@ import android.view.WindowManager;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import androidx.documentfile.provider.DocumentFile;
+
+import com.google.gson.Gson;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Reader;
 import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -63,47 +81,151 @@ import app.virtshell.emulator.TerminalSession.SessionChangedCallback;
 import app.virtshell.terminal_view.TerminalView;
 
 public final class TerminalActivity extends Activity implements ServiceConnection {
-
-    private static final int CONTEXTMENU_PASTE_ID = 1;
-    private static final int CONTEXTMENU_SHOW_HELP = 2;
-    private static final int CONTEXTMENU_OPEN_WEB = 3;
-    private static final int CONTEXTMENU_SELECT_URLS = 4;
-    private static final int CONTEXTMENU_RESET_TERMINAL_ID = 5;
-    private static final int CONTEXTMEMU_SHUTDOWN = 6;
-    private static final int CONTEXTMENU_TOGGLE_IGNORE_BELL = 7;
-
-    private final int MAX_FONTSIZE = 256;
-    private int MIN_FONTSIZE;
+    private static final String TAG = "TerminalActivity";
+    private static final int CONTEXT_MENU_PASTE_ID = 1;
+    private static final int CONTEXT_MENU_SHOW_HELP = 2;
+    private static final int CONTEXT_MENU_OPEN_WEB = 3;
+    private static final int CONTEXT_MENU_SELECT_URLS = 4;
+    private static final int CONTEXT_MENU_RESET_TERMINAL_ID = 5;
+    private static final int CONTEXT_MEMU_SHUTDOWN = 6;
+    private static final int CONTEXT_MENU_TOGGLE_IGNORE_BELL = 7;
     private static int currentFontSize = -1;
-
+    private final int MAX_FONT_SIZE = 256;
     /**
      * Global state of application settings.
      */
     TerminalPreferences mSettings;
-
     /**
      * The main view of the activity showing the terminal. Initialized in onCreate().
      */
     TerminalView mTerminalView;
-
     /**
      * The view of Extra Keys Row. Initialized in onCreate() and used by InputDispatcher.
      */
     ExtraKeysView mExtraKeysView;
-
     /**
      * The connection to the {@link TerminalService}. Requested in {@link #onCreate(Bundle)}
      * with a call to {@link #bindService(Intent, ServiceConnection, int)}, obtained and stored
      * in {@link #onServiceConnected(ComponentName, IBinder)}.
      */
     TerminalService mTermService;
-
+    Gson gson = new Gson();
+    private int MIN_FONT_SIZE;
     /**
      * If between onResume() and onStop(). Note that only one session is in the foreground of
      * the terminal view at the time, so if the session causing a change is not in the foreground
      * it should probably be treated as background.
      */
     private boolean mIsVisible;
+    private Start start;
+
+    public static void requestSAF(String prefix, Activity activity, int requestCode) {
+        Intent intent = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            StorageManager sm = activity.getSystemService(StorageManager.class);
+            StorageVolume volume = sm.getStorageVolume(new File(prefix));
+            if (volume != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    intent = volume.createOpenDocumentTreeIntent();
+                } else {
+                    intent = volume.createAccessIntent(null);
+                }
+            }
+        }
+        if (intent == null) {
+            intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        }
+        activity.startActivityForResult(intent, requestCode);
+    }
+
+    /**
+     * Extract URLs from the given text.
+     */
+    @SuppressWarnings("StringBufferReplaceableByString")
+    private static LinkedHashSet<CharSequence> extractUrls(String text) {
+        StringBuilder regex_sb = new StringBuilder();
+
+        regex_sb.append("(");                       // Begin first matching group.
+        regex_sb.append("(?:");                     // Begin scheme group.
+        regex_sb.append("dav|");                    // The DAV proto.
+        regex_sb.append("dict|");                   // The DICT proto.
+        regex_sb.append("dns|");                    // The DNS proto.
+        regex_sb.append("file|");                   // File path.
+        regex_sb.append("finger|");                 // The Finger proto.
+        regex_sb.append("ftp(?:s?)|");              // The FTP proto.
+        regex_sb.append("git|");                    // The Git proto.
+        regex_sb.append("gopher|");                 // The Gopher proto.
+        regex_sb.append("http(?:s?)|");             // The HTTP proto.
+        regex_sb.append("imap(?:s?)|");             // The IMAP proto.
+        regex_sb.append("irc(?:[6s]?)|");           // The IRC proto.
+        regex_sb.append("ip[fn]s|");                // The IPFS proto.
+        regex_sb.append("ldap(?:s?)|");             // The LDAP proto.
+        regex_sb.append("pop3(?:s?)|");             // The POP3 proto.
+        regex_sb.append("redis(?:s?)|");            // The Redis proto.
+        regex_sb.append("rsync|");                  // The Rsync proto.
+        regex_sb.append("rtsp(?:[su]?)|");          // The RTSP proto.
+        regex_sb.append("sftp|");                   // The SFTP proto.
+        regex_sb.append("smb(?:s?)|");              // The SAMBA proto.
+        regex_sb.append("smtp(?:s?)|");             // The SMTP proto.
+        regex_sb.append("svn(?:(?:\\+ssh)?)|");     // The Subversion proto.
+        regex_sb.append("tcp|");                    // The TCP proto.
+        regex_sb.append("telnet|");                 // The Telnet proto.
+        regex_sb.append("tftp|");                   // The TFTP proto.
+        regex_sb.append("udp|");                    // The UDP proto.
+        regex_sb.append("vnc|");                    // The VNC proto.
+        regex_sb.append("ws(?:s?)");                // The Websocket proto.
+        regex_sb.append(")://");                    // End scheme group.
+        regex_sb.append(")");                       // End first matching group.
+
+        // Begin second matching group.
+        regex_sb.append("(");
+
+        // User name and/or password in format 'user:pass@'.
+        regex_sb.append("(?:\\S+(?::\\S*)?@)?");
+
+        // Begin host group.
+        regex_sb.append("(?:");
+
+        // IP address (from http://www.regular-expressions.info/examples.html).
+        regex_sb.append("(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|");
+
+        // Host name or domain.
+        regex_sb.append("(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)(?:(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff]{2,})))?|");
+
+        // Just path. Used in case of 'file://' scheme.
+        regex_sb.append("/(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)");
+
+        // End host group.
+        regex_sb.append(")");
+
+        // Port number.
+        regex_sb.append("(?::\\d{1,5})?");
+
+        // Resource path with optional query string.
+        regex_sb.append("(?:/[a-zA-Z0-9:@%\\-._~!$&()*+,;=?/]*)?");
+
+        // Fragment.
+        regex_sb.append("(?:#[a-zA-Z0-9:@%\\-._~!$&()*+,;=?/]*)?");
+
+        // End second matching group.
+        regex_sb.append(")");
+
+        final Pattern urlPattern = Pattern.compile(
+            regex_sb.toString(),
+            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL);
+
+        LinkedHashSet<CharSequence> urlSet = new LinkedHashSet<>();
+        Matcher matcher = urlPattern.matcher(text);
+
+        while (matcher.find()) {
+            int matchStart = matcher.start(1);
+            int matchEnd = matcher.end();
+            String url = text.substring(matchStart, matchEnd);
+            urlSet.add(url);
+        }
+
+        return urlSet;
+    }
 
     @Override
     protected void onCreate(Bundle bundle) {
@@ -132,9 +254,23 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                     dialog.dismiss();
                     mSettings.completedFirstRun(this);
                     startApplication();
-            }).show();
+
+                }).show();
         } else {
             startApplication();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 1) {
+            if (data != null) {
+                Uri data1 = data.getData();
+                mSettings.saveUri(this, data1.toString());
+                Log.i(TAG, "onActivityResult: "+data1);
+                startApplication();
+            }
         }
     }
 
@@ -142,7 +278,9 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
      * Check for storage permission and start service.
      */
     private void startApplication() {
+
         boolean hasStoragePermission = false;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // On Android 11 we need to deal with MANAGE_EXTERNAL_STORAGE permission to overcome
             // the scoped storage restrictions.
@@ -166,12 +304,102 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
             finish();
             return;
         }
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            if (mSettings.nullUri()) {
+                requestSAF("/storage/emulated/0/", this, 1);
+                return;
+            }
+        }
+        //获取json 文件
+        String default_content = "{\n" +
+            "    \"hostFWDS\":[\n" +
+            "        {\n" +
+            "            \"to\":1080,\n" +
+            "            \"from\":80\n" +
+            "        },\n" +
+            "        {\n" +
+            "            \"to\":10022,\n" +
+            "            \"from\":22\n" +
+            "        }\n" +
+            "    ]\n" +
+            "}";
+        BufferedReader reader = null;
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            String uri = mSettings.getUri();
+            Uri parse = Uri.parse(uri);
+            DocumentFile documentFile = DocumentFile.fromTreeUri(this, parse);
+            Log.i(TAG, "startApplication: root:"+documentFile);
+            if (documentFile != null) {
+                DocumentFile file = documentFile.findFile("vshell_cfg.json");
+                Log.i(TAG, "startApplication: file:"+file);
+                if (file==null){
+                    file= documentFile.createFile("text/json", "vshell_cfg.json");
+                    if (file!=null){
+                        Log.i(TAG, "startApplication: "+file.getUri().getPath());
+                        try {
+                            OutputStream outputStream = getContentResolver().openOutputStream(file.getUri());
+                            outputStream.write(default_content.getBytes());
+                            outputStream.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                if (file != null) {
+                    InputStream inputStream;
+                    try {
+                        inputStream = getContentResolver().openInputStream(file.getUri());
+                        reader = new BufferedReader(new InputStreamReader(inputStream));
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }else {
+
+            try {
+                File file=new File("/storage/emulated/0/vshell_cfg.json")    ;
+                if (!file.exists()) {
+                    boolean newFile = file.createNewFile();
+                    if (newFile) {
+                        BufferedWriter bufferedWriter=new BufferedWriter(new FileWriter(file));
+                        bufferedWriter.write(default_content);
+                        bufferedWriter.close();
+                    }
+                }
+                reader= new BufferedReader(new FileReader(file));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        if (reader != null) {
+            start = gson.fromJson(reader, Start.class);
+            close(reader);
+        }
 
         // Start the service and make it run regardless of who is bound to it:
         Intent serviceIntent = new Intent(this, TerminalService.class);
         startService(serviceIntent);
         if (!bindService(serviceIntent, this, 0)) {
             throw new RuntimeException("bindService() failed");
+        }
+    }
+
+    private void close(Reader reader) {
+        try {
+            reader.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void close(InputStream inputStream) {
+        try {
+            if (inputStream != null) {
+                inputStream.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -192,10 +420,10 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
 
         // This is a bit arbitrary and sub-optimal. We want to give a sensible default for minimum
         // font size to prevent invisible text due to zoom be mistake:
-        MIN_FONTSIZE = (int) (4f * dipInPixels);
+        MIN_FONT_SIZE = (int) (4f * dipInPixels);
 
-        TerminalActivity.currentFontSize = Math.max(MIN_FONTSIZE,
-            Math.min(TerminalActivity.currentFontSize, MAX_FONTSIZE));
+        TerminalActivity.currentFontSize = Math.max(MIN_FONT_SIZE,
+            Math.min(TerminalActivity.currentFontSize, MAX_FONT_SIZE));
         mTerminalView.setTextSize(TerminalActivity.currentFontSize);
 
         // Use bundled in app monospace font.
@@ -328,14 +556,15 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
 
     /**
      * Get a random free high tcp port which later will be used in startQemu().
+     *
      * @return Integer value in range 30000 - 50000 which is available tcp port.
-     *         On failure -1 will be returned.
+     * On failure -1 will be returned.
      */
     private int getFreePort() {
         Random rnd = new Random();
         int port = -1;
 
-        for (int i=0; i<32; i++) {
+        for (int i = 0; i < 32; i++) {
             try (ServerSocket sock = new ServerSocket(rnd.nextInt(20001) + 30000)) {
                 sock.setReuseAddress(true);
                 port = sock.getLocalPort();
@@ -350,9 +579,11 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
 
     /**
      * Create a terminal session running QEMU.
+     *
      * @return TerminalSession instance.
      */
     private TerminalSession startQemu() {
+
         ArrayList<String> environment = new ArrayList<>();
         Context appContext = this;
 
@@ -437,13 +668,19 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
         processArgs.addAll(Arrays.asList("-device", "virtio-rng-pci,rng=rng0,id=virtio-rng-pci0"));
 
         // Networking.
-        int webPort= getFreePort();
-        mTermService.WEB_PORT = webPort;
-        if (webPort != -1) {
-            processArgs.addAll(Arrays.asList("-netdev", "user,id=vmnic0,hostfwd=tcp:127.0.0.1:" + webPort + "-:80"));
-        } else {
-            processArgs.addAll(Arrays.asList("-netdev", "user,id=vmnic0"));
+//        int webPort = getFreePort();
+//        mTermService.WEB_PORT = 1080;
+//        if (webPort != -1) {
+//            processArgs.addAll(Arrays.asList("-netdev", "user,id=vmnic0,hostfwd=tcp:127.0.0.1:" + webPort + "-:80"));
+//        } else {
+//            processArgs.addAll(Arrays.asList("-netdev", "user,id=vmnic0"));
+//        }
+        StringBuilder stringBuilder=new StringBuilder();
+        HostFWD[] hostFWDS = start.hostFWDS;
+        for (HostFWD hostFWD : hostFWDS) {
+            stringBuilder.append(",hostfwd=tcp:127.0.0.1:").append(hostFWD.to).append("-:").append(hostFWD.from);
         }
+        processArgs.addAll(Arrays.asList("-netdev", "user,id=vmnic0" + stringBuilder.toString()));
         processArgs.addAll(Arrays.asList("-device", "virtio-net-pci,netdev=vmnic0,id=virtio-net-pci0"));
 
         // Access to shared storage.
@@ -487,29 +724,29 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
 
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
-        menu.add(Menu.NONE, CONTEXTMENU_SHOW_HELP, Menu.NONE, R.string.menu_show_help);
+        menu.add(Menu.NONE, CONTEXT_MENU_SHOW_HELP, Menu.NONE, R.string.menu_show_help);
         if (mTermService != null) {
-            menu.add(Menu.NONE, CONTEXTMENU_OPEN_WEB, Menu.NONE, getResources().getString(R.string.menu_open_web_preview, "localhost:" + mTermService.WEB_PORT));
+            menu.add(Menu.NONE, CONTEXT_MENU_OPEN_WEB, Menu.NONE, getResources().getString(R.string.menu_open_web_preview, "localhost:" + mTermService.WEB_PORT));
         } else {
-            menu.add(Menu.NONE, CONTEXTMENU_OPEN_WEB, Menu.NONE, getResources().getString(R.string.menu_open_web_preview, "unavailable"));
+            menu.add(Menu.NONE, CONTEXT_MENU_OPEN_WEB, Menu.NONE, getResources().getString(R.string.menu_open_web_preview, "unavailable"));
         }
-        menu.add(Menu.NONE, CONTEXTMENU_SELECT_URLS, Menu.NONE, R.string.menu_select_urls);
-        menu.add(Menu.NONE, CONTEXTMENU_RESET_TERMINAL_ID, Menu.NONE, R.string.menu_reset_terminal);
-        menu.add(Menu.NONE, CONTEXTMEMU_SHUTDOWN, Menu.NONE, R.string.menu_shutdown);
-        menu.add(Menu.NONE, CONTEXTMENU_TOGGLE_IGNORE_BELL, Menu.NONE, R.string.menu_toggle_ignore_bell)
+        menu.add(Menu.NONE, CONTEXT_MENU_SELECT_URLS, Menu.NONE, R.string.menu_select_urls);
+        menu.add(Menu.NONE, CONTEXT_MENU_RESET_TERMINAL_ID, Menu.NONE, R.string.menu_reset_terminal);
+        menu.add(Menu.NONE, CONTEXT_MEMU_SHUTDOWN, Menu.NONE, R.string.menu_shutdown);
+        menu.add(Menu.NONE, CONTEXT_MENU_TOGGLE_IGNORE_BELL, Menu.NONE, R.string.menu_toggle_ignore_bell)
             .setCheckable(true).setChecked(mSettings.isBellIgnored());
     }
 
     @Override
     public boolean onContextItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case CONTEXTMENU_PASTE_ID:
+            case CONTEXT_MENU_PASTE_ID:
                 doPaste();
                 return true;
-            case CONTEXTMENU_SHOW_HELP:
+            case CONTEXT_MENU_SHOW_HELP:
                 startActivity(new Intent(this, HelpActivity.class));
                 return true;
-            case CONTEXTMENU_OPEN_WEB:
+            case CONTEXT_MENU_OPEN_WEB:
                 int webPort = -1;
 
                 if (mTermService != null) {
@@ -529,10 +766,10 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                     Toast.makeText(this, R.string.toast_open_web_unavailable, Toast.LENGTH_LONG).show();
                 }
                 return true;
-            case CONTEXTMENU_SELECT_URLS:
+            case CONTEXT_MENU_SELECT_URLS:
                 showUrlSelection();
                 return true;
-            case CONTEXTMENU_RESET_TERMINAL_ID:
+            case CONTEXT_MENU_RESET_TERMINAL_ID:
                 TerminalSession session = mTerminalView.getCurrentSession();
                 if (session != null) {
                     session.reset(true);
@@ -540,7 +777,7 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                         Toast.LENGTH_SHORT).show();
                 }
                 return true;
-            case CONTEXTMEMU_SHUTDOWN:
+            case CONTEXT_MEMU_SHUTDOWN:
                 if (mTermService != null) {
                     new AlertDialog.Builder(this)
                         .setTitle(R.string.dialog_shut_down_title)
@@ -552,7 +789,7 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                         ((dialog, which) -> dialog.dismiss())).show();
                 }
                 return true;
-            case CONTEXTMENU_TOGGLE_IGNORE_BELL:
+            case CONTEXT_MENU_TOGGLE_IGNORE_BELL:
                 mSettings.setIgnoreBellCharacter(this, !mSettings.isBellIgnored());
                 return true;
             default:
@@ -617,7 +854,7 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                     Toast.makeText(this, R.string.toast_url_copied,
                         Toast.LENGTH_SHORT).show();
                 }
-        }).setTitle(R.string.select_url_dialog_title).create();
+            }).setTitle(R.string.select_url_dialog_title).create();
 
         // Long press to open URL:
         dialog.setOnShowListener(di -> {
@@ -648,101 +885,12 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
     }
 
     /**
-     * Extract URLs from the given text.
-     */
-    @SuppressWarnings("StringBufferReplaceableByString")
-    private static LinkedHashSet<CharSequence> extractUrls(String text) {
-        StringBuilder regex_sb = new StringBuilder();
-
-        regex_sb.append("(");                       // Begin first matching group.
-        regex_sb.append("(?:");                     // Begin scheme group.
-        regex_sb.append("dav|");                    // The DAV proto.
-        regex_sb.append("dict|");                   // The DICT proto.
-        regex_sb.append("dns|");                    // The DNS proto.
-        regex_sb.append("file|");                   // File path.
-        regex_sb.append("finger|");                 // The Finger proto.
-        regex_sb.append("ftp(?:s?)|");              // The FTP proto.
-        regex_sb.append("git|");                    // The Git proto.
-        regex_sb.append("gopher|");                 // The Gopher proto.
-        regex_sb.append("http(?:s?)|");             // The HTTP proto.
-        regex_sb.append("imap(?:s?)|");             // The IMAP proto.
-        regex_sb.append("irc(?:[6s]?)|");           // The IRC proto.
-        regex_sb.append("ip[fn]s|");                // The IPFS proto.
-        regex_sb.append("ldap(?:s?)|");             // The LDAP proto.
-        regex_sb.append("pop3(?:s?)|");             // The POP3 proto.
-        regex_sb.append("redis(?:s?)|");            // The Redis proto.
-        regex_sb.append("rsync|");                  // The Rsync proto.
-        regex_sb.append("rtsp(?:[su]?)|");          // The RTSP proto.
-        regex_sb.append("sftp|");                   // The SFTP proto.
-        regex_sb.append("smb(?:s?)|");              // The SAMBA proto.
-        regex_sb.append("smtp(?:s?)|");             // The SMTP proto.
-        regex_sb.append("svn(?:(?:\\+ssh)?)|");     // The Subversion proto.
-        regex_sb.append("tcp|");                    // The TCP proto.
-        regex_sb.append("telnet|");                 // The Telnet proto.
-        regex_sb.append("tftp|");                   // The TFTP proto.
-        regex_sb.append("udp|");                    // The UDP proto.
-        regex_sb.append("vnc|");                    // The VNC proto.
-        regex_sb.append("ws(?:s?)");                // The Websocket proto.
-        regex_sb.append(")://");                    // End scheme group.
-        regex_sb.append(")");                       // End first matching group.
-
-        // Begin second matching group.
-        regex_sb.append("(");
-
-        // User name and/or password in format 'user:pass@'.
-        regex_sb.append("(?:\\S+(?::\\S*)?@)?");
-
-        // Begin host group.
-        regex_sb.append("(?:");
-
-        // IP address (from http://www.regular-expressions.info/examples.html).
-        regex_sb.append("(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|");
-
-        // Host name or domain.
-        regex_sb.append("(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)(?:(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff]{2,})))?|");
-
-        // Just path. Used in case of 'file://' scheme.
-        regex_sb.append("/(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)");
-
-        // End host group.
-        regex_sb.append(")");
-
-        // Port number.
-        regex_sb.append("(?::\\d{1,5})?");
-
-        // Resource path with optional query string.
-        regex_sb.append("(?:/[a-zA-Z0-9:@%\\-._~!$&()*+,;=?/]*)?");
-
-        // Fragment.
-        regex_sb.append("(?:#[a-zA-Z0-9:@%\\-._~!$&()*+,;=?/]*)?");
-
-        // End second matching group.
-        regex_sb.append(")");
-
-        final Pattern urlPattern = Pattern.compile(
-            regex_sb.toString(),
-            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL);
-
-        LinkedHashSet<CharSequence> urlSet = new LinkedHashSet<>();
-        Matcher matcher = urlPattern.matcher(text);
-
-        while (matcher.find()) {
-            int matchStart = matcher.start(1);
-            int matchEnd = matcher.end();
-            String url = text.substring(matchStart, matchEnd);
-            urlSet.add(url);
-        }
-
-        return urlSet;
-    }
-
-    /**
      * Change terminal font size.
      */
     public void changeFontSize(boolean increase) {
         TerminalActivity.currentFontSize += (increase ? 1 : -1) * 2;
-        TerminalActivity.currentFontSize = Math.max(MIN_FONTSIZE,
-            Math.min(TerminalActivity.currentFontSize, MAX_FONTSIZE));
+        TerminalActivity.currentFontSize = Math.max(MIN_FONT_SIZE,
+            Math.min(TerminalActivity.currentFontSize, MAX_FONT_SIZE));
         mTerminalView.setTextSize(TerminalActivity.currentFontSize);
     }
 
