@@ -45,7 +45,7 @@ public class Installer {
             "efi-virtio.rom",
             "kvmvapic.bin",
             Config.CDROM_IMAGE_NAME,
-            Config.HDD_IMAGE_NAME,
+//            Config.HDD_IMAGE_NAME,
         };
 
         boolean allFilesPresent = true;

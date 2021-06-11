@@ -65,14 +65,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.io.Reader;
-import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.Random;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -268,7 +266,7 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
             if (data != null) {
                 Uri data1 = data.getData();
                 mSettings.saveUri(this, data1.toString());
-                Log.i(TAG, "onActivityResult: "+data1);
+                Log.i(TAG, "onActivityResult: " + data1);
                 startApplication();
             }
         }
@@ -310,32 +308,22 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                 return;
             }
         }
+
         //获取json 文件
-        String default_content = "{\n" +
-            "    \"hostFWDS\":[\n" +
-            "        {\n" +
-            "            \"to\":1080,\n" +
-            "            \"from\":80\n" +
-            "        },\n" +
-            "        {\n" +
-            "            \"to\":10022,\n" +
-            "            \"from\":22\n" +
-            "        }\n" +
-            "    ]\n" +
-            "}";
+        String default_content = getDefault_content();
         BufferedReader reader = null;
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
             String uri = mSettings.getUri();
             Uri parse = Uri.parse(uri);
             DocumentFile documentFile = DocumentFile.fromTreeUri(this, parse);
-            Log.i(TAG, "startApplication: root:"+documentFile);
+            Log.i(TAG, "startApplication: root:" + documentFile);
             if (documentFile != null) {
                 DocumentFile file = documentFile.findFile("vshell_cfg.json");
-                Log.i(TAG, "startApplication: file:"+file);
-                if (file==null){
-                    file= documentFile.createFile("text/json", "vshell_cfg.json");
-                    if (file!=null){
-                        Log.i(TAG, "startApplication: "+file.getUri().getPath());
+                Log.i(TAG, "startApplication: file:" + file);
+                if (file == null) {
+                    file = documentFile.createFile("text/json", "vshell_cfg.json");
+                    if (file != null) {
+                        Log.i(TAG, "startApplication: " + file.getUri().getPath());
                         try {
                             OutputStream outputStream = getContentResolver().openOutputStream(file.getUri());
                             outputStream.write(default_content.getBytes());
@@ -355,28 +343,30 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                     }
                 }
             }
-        }else {
+        } else {
 
             try {
-                File file=new File("/storage/emulated/0/vshell_cfg.json")    ;
+                File file = new File("/storage/emulated/0/vshell_cfg.json");
                 if (!file.exists()) {
                     boolean newFile = file.createNewFile();
                     if (newFile) {
-                        BufferedWriter bufferedWriter=new BufferedWriter(new FileWriter(file));
+                        BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(file));
                         bufferedWriter.write(default_content);
                         bufferedWriter.close();
                     }
                 }
-                reader= new BufferedReader(new FileReader(file));
+                reader = new BufferedReader(new FileReader(file));
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
         if (reader != null) {
-            start = gson.fromJson(reader, Start.class);
+            this.start = gson.fromJson(reader, Start.class);
             close(reader);
         }
-
+        if (this.start.hddName == null || this.start.hddName.length() == 0){
+            this.start.hddName = new File(Environment.getExternalStorageDirectory(), Config.HDD_IMAGE_NAME).getAbsolutePath();
+        }
         // Start the service and make it run regardless of who is bound to it:
         Intent serviceIntent = new Intent(this, TerminalService.class);
         startService(serviceIntent);
@@ -385,19 +375,19 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
         }
     }
 
+    private String getDefault_content() {
+        List<HostFWD> hostFWDS=new ArrayList<>();
+        hostFWDS.add(new HostFWD(1080,80));
+        hostFWDS.add(new HostFWD(10022, 22));
+        Start start=new Start();
+        start.hostFWDS= hostFWDS.toArray(new HostFWD[0]);
+        start.hddName = new File(Environment.getExternalStorageDirectory(), Config.HDD_IMAGE_NAME).getAbsolutePath();
+        return gson.toJson(start);
+    }
+
     private void close(Reader reader) {
         try {
             reader.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void close(InputStream inputStream) {
-        try {
-            if (inputStream != null) {
-                inputStream.close();
-            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -521,7 +511,11 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                 Bell.getInstance(TerminalActivity.this).doBell();
             }
         };
-
+        File file = new File(Environment.getExternalStorageDirectory(), Config.HDD_IMAGE_NAME);
+        if (!file.exists()) {
+            Toast.makeText(mTermService, "qcow2 文件不存在", Toast.LENGTH_SHORT).show();
+            finish();
+        }
         if (mTermService.getSession() == null) {
             if (mIsVisible) {
                 Installer.setupIfNeeded(TerminalActivity.this, () -> {
@@ -552,29 +546,6 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
         if (!TerminalActivity.this.isFinishing()) {
             finish();
         }
-    }
-
-    /**
-     * Get a random free high tcp port which later will be used in startQemu().
-     *
-     * @return Integer value in range 30000 - 50000 which is available tcp port.
-     * On failure -1 will be returned.
-     */
-    private int getFreePort() {
-        Random rnd = new Random();
-        int port = -1;
-
-        for (int i = 0; i < 32; i++) {
-            try (ServerSocket sock = new ServerSocket(rnd.nextInt(20001) + 30000)) {
-                sock.setReuseAddress(true);
-                port = sock.getLocalPort();
-                break;
-            } catch (Exception e) {
-                Log.w(Config.APP_LOG_TAG, "cannot acquire tcp port", e);
-            }
-        }
-
-        return port;
     }
 
     /**
@@ -649,9 +620,8 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
         // SCSI CD-ROM(s) and HDD(s).
         processArgs.addAll(Arrays.asList("-drive", "file=" + runtimeDataPath + "/"
             + Config.CDROM_IMAGE_NAME + ",if=none,media=cdrom,index=0,id=cd0"));
-        processArgs.addAll(Arrays.asList("-drive", "file=" + runtimeDataPath + "/"
-            + Config.HDD_IMAGE_NAME
-            + ",if=none,index=2,discard=unmap,detect-zeroes=unmap,cache=writeback,id=hd0"));
+        processArgs.addAll(Arrays.asList("-drive", "file=" + start.hddName
+            + ",if=none,index=2,discard=unmap,detect-zeroes=unmap,id=hd0"));
         processArgs.addAll(Arrays.asList("-device", "virtio-scsi-pci,id=virtio-scsi-pci0"));
         processArgs.addAll(Arrays.asList("-device",
             "scsi-cd,bus=virtio-scsi-pci0.0,id=scsi-cd0,drive=cd0"));
@@ -662,6 +632,7 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
         // Default HDD setup has a valid MBR allowing to try next drive in case if OS not
         // installed, so CD-ROM is going to be actually booted.
         processArgs.addAll(Arrays.asList("-boot", "c,menu=on"));
+//        processArgs.addAll(Arrays.asList("-boot", "d"));
 
         // Setup random number generator.
         processArgs.addAll(Arrays.asList("-object", "rng-random,filename=/dev/urandom,id=rng0"));
@@ -675,7 +646,7 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
 //        } else {
 //            processArgs.addAll(Arrays.asList("-netdev", "user,id=vmnic0"));
 //        }
-        StringBuilder stringBuilder=new StringBuilder();
+        StringBuilder stringBuilder = new StringBuilder();
         HostFWD[] hostFWDS = start.hostFWDS;
         for (HostFWD hostFWD : hostFWDS) {
             stringBuilder.append(",hostfwd=tcp:127.0.0.1:").append(hostFWD.to).append("-:").append(hostFWD.from);

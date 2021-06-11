@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="application_name">vShell</string>
+    <string name="cancel_label">取消</string>
+    <string name="exit_label">退出</string>
+    <string name="firstrun_dialog_title">注意</string>
+    <string name="installer_progress_message">初始化中</string>
+    <string name="installer_error_title">初始化失败</string>
+    <string name="installer_error_try_again_button">再试一次</string>
+    <string name="menu_copy_text">复制</string>
+    <string name="menu_paste_text">粘贴</string>
+    <string name="menu_show_help">显示帮助</string>
+    <string name="menu_reset_terminal">重置</string>
+    <string name="menu_shutdown">关闭</string>
+    <string name="toast_open_web_unavailable">无法使用此功能，因为端口转发失败</string>
+    <string name="toast_bad_url">无法打开此链接</string>
+    <string name="toast_no_urls_found">未检测到链接</string>
+    <string name="toast_url_copied">链接以复制到剪贴板</string>
+    <string name="dialog_shut_down_title">关闭虚拟机</string>
+    <string name="toast_boot_notification">启动虚拟机需要一定时间</string>
+    <string name="toast_reset_terminal">终端状态已被重置</string>
+    <string name="toast_no_storage_permission">无法继续，因为没有存储权限</string>
+    <string name="toast_open_web_intent_failure">打开浏览器失败</string>
+    <string name="menu_select_urls">选择链接</string>
+    <string name="menu_open_web_preview">打开浏览器 (%s)</string>
+    <string name="menu_more">更多</string>
+    <string name="installer_error_body">无法设置运行时资源</string>
+    <string name="firstrun_dialog_desc"><b>vShell</b> 提供一个安装了Alpine Linux 的虚拟机。启动虚拟机需要花费5分钟，具体时间取决于你的设备。 A some knowledge about shell scripting and administering Linux systems is required in order to use the application successfully.\\n\\n一旦你关闭这个对话框, 如果还没没有授予存储权限将会请求存储权限。这个权限用来让你在虚拟机中访问你的文件。\\n\\n长按屏幕任何位置会显示一个菜单，包括一个user\\\'s guide.\\n\\n<i>免责声明: 此应用和作者都不属于Alpine Linux 项目. 操作系统并非由作者提供，对软件包中bug不负任何责任。</i></string>
+    <string name="notification_action_shutdown">关闭</string>
+    <string name="notification_action_wake_lock">请求wakelock</string>
+    <string name="notification_action_wake_unlock">释放wakelock</string>
+    <string name="dialog_shut_down_desc">所有为保存的数据都会丢屎，你还要继续吗？</string>
+    <string name="select_url_dialog_title">单击复制或者长按打开</string>
+</resources>

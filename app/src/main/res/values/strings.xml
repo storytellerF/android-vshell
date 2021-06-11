@@ -5,7 +5,7 @@
     <!-- Common -->
     <string name="cancel_label">Cancel</string>
     <string name="exit_label">Exit</string>
-    <string name="ok_label">OK</string>
+    <string name="ok_label" translatable="false">OK</string>
 
     <!-- First run dialog -->
     <string name="firstrun_dialog_title">Notice</string>
@@ -28,7 +28,7 @@
     <string name="menu_select_urls">Select URLs</string>
     <string name="menu_reset_terminal">Reset</string>
     <string name="menu_shutdown">Shut down</string>
-    <string name="menu_toggle_ignore_bell">Ignore bell character</string>
+    <string name="menu_toggle_ignore_bell" translatable="false">Ignore bell character</string>
 
     <!-- Context menu: Open Web preview toast messages -->
     <string name="toast_open_web_intent_failure">Failed to launch Web browser.</string>
@@ -43,7 +43,7 @@
     <!-- Shut down dialog -->
     <string name="dialog_shut_down_title">Shut down VM</string>
     <string name="dialog_shut_down_desc">All unsaved data will be lost, do you want to continue?</string>
-    <string name="dialog_shut_down_yes_btn">Yes</string>
+    <string name="dialog_shut_down_yes_btn" translatable="false">Yes</string>
 
     <!-- Notification -->
     <string name="notification_action_wake_lock">Acquire wakelock</string>
