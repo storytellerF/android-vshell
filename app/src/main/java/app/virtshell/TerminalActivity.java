@@ -380,6 +380,7 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
         hostFWDS.add(new HostFWD(1080,80));
         hostFWDS.add(new HostFWD(10022, 22));
         Start start=new Start();
+        start.webPort=1080;
         start.hostFWDS= hostFWDS.toArray(new HostFWD[0]);
         start.hddName = new File(Environment.getExternalStorageDirectory(), Config.HDD_IMAGE_NAME).getAbsolutePath();
         return gson.toJson(start);
@@ -639,13 +640,8 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
         processArgs.addAll(Arrays.asList("-device", "virtio-rng-pci,rng=rng0,id=virtio-rng-pci0"));
 
         // Networking.
-//        int webPort = getFreePort();
-//        mTermService.WEB_PORT = 1080;
-//        if (webPort != -1) {
-//            processArgs.addAll(Arrays.asList("-netdev", "user,id=vmnic0,hostfwd=tcp:127.0.0.1:" + webPort + "-:80"));
-//        } else {
-//            processArgs.addAll(Arrays.asList("-netdev", "user,id=vmnic0"));
-//        }
+        mTermService.WEB_PORT = start.webPort;
+
         StringBuilder stringBuilder = new StringBuilder();
         HostFWD[] hostFWDS = start.hostFWDS;
         for (HostFWD hostFWD : hostFWDS) {
