@@ -255,7 +255,20 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
 
                 }).show();
         } else {
-            startApplication();
+            if (mSettings.isInstalled()) {
+                startApplication();
+            } else
+                new AlertDialog.Builder(this)
+                    .setCancelable(false)
+                    .setTitle("安装情况")
+                    .setMessage("系统是否安装成功?")
+                    .setPositiveButton(R.string.ok_label, ((dialog, which) -> {
+                        mSettings.alreadyInstalled(TerminalActivity.this);
+                        startApplication();
+                    }))
+                    .setNegativeButton(R.string.cancel_label, ((dialog, which) -> {
+                        startApplication();
+                    })).show();
         }
     }
 
@@ -364,9 +377,12 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
             this.start = gson.fromJson(reader, Start.class);
             close(reader);
         }
-        if (this.start.hddName == null || this.start.hddName.length() == 0){
+        if (this.start.hddName == null || this.start.hddName.length() == 0) {
             this.start.hddName = new File(Environment.getExternalStorageDirectory(), Config.HDD_IMAGE_NAME).getAbsolutePath();
         }
+        if (this.start.cdrom == null || this.start.cdrom.length() == 0)
+            start.cdrom = new File(Environment.getExternalStorageDirectory(), Config.CDROM_IMAGE_NAME).getAbsolutePath();
+
         // Start the service and make it run regardless of who is bound to it:
         Intent serviceIntent = new Intent(this, TerminalService.class);
         startService(serviceIntent);
@@ -376,13 +392,14 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
     }
 
     private String getDefault_content() {
-        List<HostFWD> hostFWDS=new ArrayList<>();
-        hostFWDS.add(new HostFWD(1080,80));
+        List<HostFWD> hostFWDS = new ArrayList<>();
+        hostFWDS.add(new HostFWD(1080, 80));
         hostFWDS.add(new HostFWD(10022, 22));
-        Start start=new Start();
-        start.webPort=1080;
-        start.hostFWDS= hostFWDS.toArray(new HostFWD[0]);
+        Start start = new Start();
+        start.webPort = 1080;
+        start.hostFWDS = hostFWDS.toArray(new HostFWD[0]);
         start.hddName = new File(Environment.getExternalStorageDirectory(), Config.HDD_IMAGE_NAME).getAbsolutePath();
+        start.cdrom = new File(Environment.getExternalStorageDirectory(), Config.CDROM_IMAGE_NAME).getAbsolutePath();
         return gson.toJson(start);
     }
 
@@ -512,9 +529,15 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
                 Bell.getInstance(TerminalActivity.this).doBell();
             }
         };
-        File file = new File(Environment.getExternalStorageDirectory(), Config.HDD_IMAGE_NAME);
+
+        File file = new File(start.hddName);
         if (!file.exists()) {
             Toast.makeText(mTermService, "qcow2 文件不存在", Toast.LENGTH_SHORT).show();
+            finish();
+        }
+        File file1 = new File(start.cdrom);
+        if (!file1.exists()) {
+            Toast.makeText(mTermService, "iso 文件不存在", Toast.LENGTH_SHORT).show();
             finish();
         }
         if (mTermService.getSession() == null) {
@@ -619,20 +642,22 @@ public final class TerminalActivity extends Activity implements ServiceConnectio
         processArgs.add("-nodefaults");
 
         // SCSI CD-ROM(s) and HDD(s).
-        processArgs.addAll(Arrays.asList("-drive", "file=" + runtimeDataPath + "/"
-            + Config.CDROM_IMAGE_NAME + ",if=none,media=cdrom,index=0,id=cd0"));
-        processArgs.addAll(Arrays.asList("-drive", "file=" + start.hddName
-            + ",if=none,index=2,discard=unmap,detect-zeroes=unmap,id=hd0"));
-        processArgs.addAll(Arrays.asList("-device", "virtio-scsi-pci,id=virtio-scsi-pci0"));
-        processArgs.addAll(Arrays.asList("-device",
-            "scsi-cd,bus=virtio-scsi-pci0.0,id=scsi-cd0,drive=cd0"));
-        processArgs.addAll(Arrays.asList("-device",
-            "scsi-hd,bus=virtio-scsi-pci0.0,id=scsi-hd0,drive=hd0"));
-
+//        processArgs.addAll(Arrays.asList("-drive", "file=" + start.cdrom
+//            + ",if=none,media=cdrom,index=0,id=cd0"));
+//        processArgs.addAll(Arrays.asList("-drive", "file=" + start.hddName
+//            + ",if=none,index=2,discard=unmap,detect-zeroes=unmap,id=hd0"));
+//        processArgs.addAll(Arrays.asList("-device", "virtio-scsi-pci,id=virtio-scsi-pci0"));
+//        processArgs.addAll(Arrays.asList("-device",
+//            "scsi-cd,bus=virtio-scsi-pci0.0,id=scsi-cd0,drive=cd0"));
+//        processArgs.addAll(Arrays.asList("-device",
+//            "scsi-hd,bus=virtio-scsi-pci0.0,id=scsi-hd0,drive=hd0"));
+        if (!mSettings.isInstalled())
+            processArgs.addAll(Arrays.asList("-cdrom", start.cdrom));
+        processArgs.addAll(Arrays.asList("-drive", "file=" + start.hddName + ",format=qcow2"));
         // Try to boot from HDD.
         // Default HDD setup has a valid MBR allowing to try next drive in case if OS not
         // installed, so CD-ROM is going to be actually booted.
-        processArgs.addAll(Arrays.asList("-boot", "c,menu=on"));
+//        processArgs.addAll(Arrays.asList("-boot", "c,menu=on"));
 //        processArgs.addAll(Arrays.asList("-boot", "d"));
 
         // Setup random number generator.

@@ -36,6 +36,7 @@ public class TerminalPreferences {
     private boolean mIgnoreBellCharacter;
     private int mDataVersion;
     private String uri;
+    private boolean installed;
 
     public TerminalPreferences(Context context) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
@@ -44,11 +45,22 @@ public class TerminalPreferences {
         mIgnoreBellCharacter = prefs.getBoolean(PREF_IGNORE_BELL, false);
         mDataVersion = prefs.getInt(PREF_DATA_VERSION, 0);
         uri = prefs.getString("uri", null);
+        installed = prefs.getBoolean("installed", false);
+    }
+
+    public boolean isInstalled() {
+        return installed;
+    }
+
+    public void alreadyInstalled(Context context) {
+        installed = true;
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putBoolean("installed", installed).apply();
     }
 
     public boolean nullUri() {
-        return uri==null;
+        return uri == null;
     }
+
     public void saveUri(Context context, String uri) {
         this.uri = uri;
         PreferenceManager.getDefaultSharedPreferences(context).edit()
