@@ -38,3 +38,17 @@ json 格式为
 初次进入系统为live cd模式，需要输入`setup-alpine` 进行安装，具体安装教程自行搜索
 
 安装之后，关闭此软件（彻底关闭，通知栏不能有通知），然后再次打开，会询问是否安装成功，选择OK 即可进入系统。以后再次打开不会再次询问是否安装成功。
+
+## 关于qcow2
+
+这是qemu要使用的文件，可以通过`qemu-img` 创建。[alpine qemu](https://wiki.alpinelinux.org/wiki/Qemu)
+
+```shell script
+qemu-img create -f qcow2 alpine.qcow2 8G
+```
+
+大小最好1G 以上
+
+## 关于iso
+
+这是系统镜像文件,可以到这里下载[download](https://www.alpinelinux.org/downloads/)
